@@ -35,6 +35,7 @@ public:
 		this->x = x;
 		this->y = y;
 	}
+	Point() {}
 };
 
 struct Rect { //Defining rectangle for bounding box
@@ -54,15 +55,15 @@ const double OneDThreshold = 0.25; // customize to desired gesture set (usually 
 const Point Origin(0, 0);
 const double Diagonal = sqrt(SquareSize * SquareSize + SquareSize * SquareSize);
 const double HalfDiagonal = 0.5 * Diagonal;
-const double AngleRange = Deg2Rad(45.0);
-const double AnglePrecision = Deg2Rad(2.0);
+const double AngleRange = 45.0 * M_PI / 180.0;
+const double AnglePrecision = 2.0 * M_PI / 180.0;
 const double Phi = 0.5 * (-1.0 + sqrt(5.0)); // Golden Ratio
 const int StartAngleIndex = (NumPoints / 8); // eighth of gesture length
-const double AngleSimilarityThreshold = Deg2Rad(30.0);
+const double AngleSimilarityThreshold = 30.0 * M_PI / 180.0;
 
-double Deg2Rad(double d) {
-	return (d * M_PI / 180.0);
-}
+//double Deg2Rad(double d) {
+//	return (d * M_PI / 180.0);
+//}
 
 
 
@@ -72,7 +73,7 @@ public:
 	std::vector<Point> points;
 	std::vector<double> vectorizedPoints;
 	Point StartUnitVector;
-
+	Unistroke() {}
 	Unistroke(string& name, bool useBoundedRotationInvariance, vector<Point>& points) //Constructor where the point are preprocessed and stored
 	{
 		//Note 1.Resample 2.Rotate By needs indicative angle 3.Scale 4.Transalate 5.For Protractor -- Vectorize
@@ -86,6 +87,7 @@ public:
 		}
 		this->points = TranslateTo(this->points, Origin);//5
 		this->StartUnitVector = CalcStartUnitVector(this->points, StartAngleIndex); //should check it again
+		wxLogMessage("%f ,%f",StartUnitVector.x,StartUnitVector.y);
 		this->vectorizedPoints = Vectorize(this->points); // for Protractor	
 	}
 	std::vector<Point>Resample(std::vector<Point>& points, int n)
@@ -227,6 +229,7 @@ public:
 	std::vector<double> vectorizedPoints;
 	int NumStrokes;
 	std::vector<Unistroke> Unistrokes;
+	Multistroke() {}
 
 	Multistroke(std::string name, bool useBoundedRotationInvariance, std::vector<std::vector<Point>> strokes) {
 		this->name = name;
@@ -331,6 +334,7 @@ class MGestureRecognizer {
 
 	
 public:
+	MGestureRecognizer() {}
 	MGestureRecognizer(bool useBoundedRotationInvariance)
 	{
 		// one predefined multistroke for each multistroke type
@@ -430,6 +434,7 @@ public:
 		 Multistrokes.push_back(Multistroke(gestures[14], useBoundedRotationInvariance, { asteriskPoints }));
 
 	}
+
 	vector<Multistroke> Multistrokes;
 	Result Recognize(std::vector<std::vector<Point>> strokes, bool useBoundedRotationInvariance, bool requireSameNoOfStrokes, bool useProtractor) {
 		auto t0 = std::chrono::high_resolution_clock::now();
@@ -595,25 +600,39 @@ public:
 	//Canvas for drawing 
 	MyCanvas(wxWindow* parent) : wxWindow(parent, wxID_ANY)
 	{
+		
+		m_output = new wxStaticText(this, wxID_ANY, "");
+		m_submitButton = new wxButton(this, wxID_ANY, "Submit");
+		wxFont font(12, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
+		m_font = font;
+		m_output->SetFont(m_font);
+		
+		m_submitButton->SetBackgroundColour(wxColour(0, 255, 0));
+		wxBoxSizer* sizer = new wxBoxSizer(wxVERTICAL);
+		//Text Sizer
+		wxBoxSizer* textSizer = new wxBoxSizer(wxHORIZONTAL);
+	textSizer->Add(m_output, 0, wxALIGN_CENTER_VERTICAL | wxLeft, 0);
+	sizer->Add(textSizer, 0, wxALIGN_CENTRE_HORIZONTAL | wxTop, 10);
+			sizer->AddStretchSpacer(1);
+	
+		wxBoxSizer* buttonsSizer = new wxBoxSizer(wxHORIZONTAL);
+		buttonsSizer->Add(m_submitButton, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, 20);
+
+		sizer->Add(buttonsSizer, 0, wxALIGN_CENTRE_HORIZONTAL | wxBottom, 10);
+		
+		SetSizerAndFit(sizer);
+
 		Connect(wxEVT_PAINT, wxPaintEventHandler(MyCanvas::OnPaint));
 		Connect(wxEVT_LEFT_DOWN, wxMouseEventHandler(MyCanvas::OnLeftDown));
 		Connect(wxEVT_LEFT_UP, wxMouseEventHandler(MyCanvas::OnLeftUp));
 		Connect(wxEVT_MOTION, wxMouseEventHandler(MyCanvas::OnMotion));
-		m_output = new wxStaticText(this, wxID_ANY, "");
-		wxFont font(20, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
-		m_font = font;
-		m_output->SetFont(m_font);
-		//XML Files points to be loaded
-		/*OfflineRecognizer a;*/
-		MGestureRecognizer a(true);
-		/*a.preProcessOfflineData();
-		a.recognizeOfflineData();*/
-
+		Connect(m_submitButton->GetId(), wxEVT_BUTTON, wxCommandEventHandler(MyCanvas::OnSubmitButtonClick));
 	}
 private:
 	//event handler is called when the canvas is repainted
 	bool m_isDrawing = false;
 	vector<Point> strokes;
+	wxButton* m_submitButton;
 	void OnPaint(wxPaintEvent& event)
 	{
 		wxPaintDC dc(this);
@@ -627,22 +646,8 @@ private:
 
 		delete gc;
 	}
-	//event handler is called when the left mouse button is pressed and pushes position to m_points
-	void OnLeftDown(wxMouseEvent& event)
-	{
-		if (!m_isDrawing) {
-			m_isDrawing = true;
-			m_points.clear();
-		}
-		m_points.push_back(event.GetPosition());
-		CaptureMouse();
-	}
-	//event handler is called when the left mouse button is released
-	void OnLeftUp(wxMouseEvent& event)
-	{
-		m_points.push_back(event.GetPosition());
-		ReleaseMouse();
-		m_isDrawing = false;
+	void OnSubmitButtonClick(wxCommandEvent& event) {
+
 		vector<vector<Point>> strokes;
 		vector<Point> stroke;
 		for (auto& wxPoint : m_points) {
@@ -653,10 +658,30 @@ private:
 			}
 		}
 		MGestureRecognizer GR(true); // Instantiate your recognizer object
-		Result res = GR.Recognize(strokes, false);
+		Result res = GR.Recognize(strokes, false, false, false);
 		wxString outputStr = wxString::Format("Result: %s (%f) in %d ms", res.Name, res.Score, res.Time);
 		m_output->SetLabel(outputStr);
+		m_points.clear();
 		Refresh();
+			}
+	//event handler is called when the left mouse button is pressed and pushes position to m_points
+	void OnLeftDown(wxMouseEvent& event)
+	{
+		if (!m_isDrawing) {
+			m_isDrawing = true;
+			/*m_points.clear();*/
+		}
+		m_points.push_back(event.GetPosition());
+		CaptureMouse();
+	}
+	//event handler is called when the left mouse button is released
+	void OnLeftUp(wxMouseEvent& event)
+	{
+		m_points.push_back(event.GetPosition());
+		ReleaseMouse();
+		m_isDrawing = false;
+
+		
 	}
 	//function event handler is called when the mouse is moved
 	void OnMotion(wxMouseEvent& event)
@@ -675,3 +700,21 @@ private:
 	wxStaticText* m_output;
 
 };
+
+class MyApp : public wxApp
+{
+public:
+	virtual bool OnInit()
+	{
+		wxFrame* frame = new wxFrame(NULL, wxID_ANY, "$1 Recognizer");
+		MyCanvas* canvas = new MyCanvas(frame);
+		frame->Show();
+
+
+		return true;
+	}
+};
+
+
+//creates an instance of the MyApp
+wxIMPLEMENT_APP(MyApp);
