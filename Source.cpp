@@ -600,26 +600,26 @@ public:
 	//Canvas for drawing 
 	MyCanvas(wxWindow* parent) : wxWindow(parent, wxID_ANY)
 	{
-		
+
 		m_output = new wxStaticText(this, wxID_ANY, "");
 		m_submitButton = new wxButton(this, wxID_ANY, "Submit");
 		wxFont font(12, wxFONTFAMILY_DEFAULT, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
 		m_font = font;
 		m_output->SetFont(m_font);
-		
+
 		m_submitButton->SetBackgroundColour(wxColour(0, 255, 0));
 		wxBoxSizer* sizer = new wxBoxSizer(wxVERTICAL);
 		//Text Sizer
 		wxBoxSizer* textSizer = new wxBoxSizer(wxHORIZONTAL);
-	textSizer->Add(m_output, 0, wxALIGN_CENTER_VERTICAL | wxLeft, 0);
-	sizer->Add(textSizer, 0, wxALIGN_CENTRE_HORIZONTAL | wxTop, 10);
-			sizer->AddStretchSpacer(1);
-	
+		textSizer->Add(m_output, 0, wxALIGN_CENTER_VERTICAL | wxLeft, 0);
+		sizer->Add(textSizer, 0, wxALIGN_CENTRE_HORIZONTAL | wxTop, 10);
+		sizer->AddStretchSpacer(1);
+
 		wxBoxSizer* buttonsSizer = new wxBoxSizer(wxHORIZONTAL);
 		buttonsSizer->Add(m_submitButton, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, 20);
 
 		sizer->Add(buttonsSizer, 0, wxALIGN_CENTRE_HORIZONTAL | wxBottom, 10);
-		
+
 		SetSizerAndFit(sizer);
 
 		Connect(wxEVT_PAINT, wxPaintEventHandler(MyCanvas::OnPaint));
@@ -631,30 +631,52 @@ public:
 private:
 	//event handler is called when the canvas is repainted
 	bool m_isDrawing = false;
-	vector<Point> strokes;
 	wxButton* m_submitButton;
+	vector<wxPoint> m_points;
+	vector<vector<wxPoint>> listOf;
+	vector<vector<Point>> strokes;
+	wxFont m_font;
+	vector<Point> points;
+	wxStaticText* m_output;
 	void OnPaint(wxPaintEvent& event)
 	{
 		wxPaintDC dc(this);
 		wxGraphicsContext* gc = wxGraphicsContext::Create(dc);
 
 		gc->SetPen(wxPen(*wxRED, 5));
-		for (size_t i = 1; i < m_points.size(); i++)
-		{
-			dc.DrawLine(m_points[i - 1].x, m_points[i - 1].y, m_points[i].x, m_points[i].y);
+
+		size_t i = 1;
+		while (i < m_points.size()) {
+			while (i < m_points.size() && m_points[i - 1] != wxPoint(-1, -1) && m_points[i] != wxPoint(-1, -1)) {
+				dc.DrawLine(m_points[i - 1].x, m_points[i - 1].y, m_points[i].x, m_points[i].y);
+				i++;
+			}
+			i++;
 		}
 
 		delete gc;
 	}
+
 	void OnSubmitButtonClick(wxCommandEvent& event) {
 
 		vector<vector<Point>> strokes;
-		vector<Point> stroke;
-		for (auto& wxPoint : m_points) {
-			stroke.emplace_back(wxPoint.x, wxPoint.y);
-			if (wxPoint == m_points.back()) {
-				strokes.push_back(stroke);
-				stroke.clear();
+		std::vector<Point> currentStroke;
+		for (size_t i = 0; i < m_points.size(); i++) {
+			const wxPoint& p = m_points[i];
+
+			// Check if this is the end of a stroke
+			if (p == wxPoint(-1, -1) || i == m_points.size() - 1) {
+				// Add the last point if it hasn't already been added
+				if (i != m_points.size() - 1) {
+					currentStroke.emplace_back(p.x, p.y);
+				}
+
+				// Add the current stroke to the list of strokes and start a new stroke
+				strokes.push_back(currentStroke);
+				currentStroke.clear();
+			}
+			else {
+				currentStroke.emplace_back(p.x, p.y);
 			}
 		}
 		MGestureRecognizer GR(true); // Instantiate your recognizer object
@@ -663,26 +685,28 @@ private:
 		m_output->SetLabel(outputStr);
 		m_points.clear();
 		Refresh();
-			}
+	}
+
 	//event handler is called when the left mouse button is pressed and pushes position to m_points
 	void OnLeftDown(wxMouseEvent& event)
 	{
 		if (!m_isDrawing) {
 			m_isDrawing = true;
-			/*m_points.clear();*/
+			m_points.push_back(wxPoint(-1, -1));
 		}
 		m_points.push_back(event.GetPosition());
 		CaptureMouse();
 	}
+
 	//event handler is called when the left mouse button is released
 	void OnLeftUp(wxMouseEvent& event)
 	{
 		m_points.push_back(event.GetPosition());
 		ReleaseMouse();
+		m_points.push_back(wxPoint(-1, -1));
 		m_isDrawing = false;
-
-		
 	}
+
 	//function event handler is called when the mouse is moved
 	void OnMotion(wxMouseEvent& event)
 	{
@@ -693,11 +717,6 @@ private:
 			Refresh();
 		}
 	}
-
-	vector<wxPoint> m_points;
-	//points being stored for future reference
-	vector<Point> points;
-	wxStaticText* m_output;
 
 };
 
