@@ -24,7 +24,7 @@
 #include <chrono>
 #include <memory>
 #include <unordered_map>
-
+#include <wx/log.h>
 using namespace std;
 
 class Point {//Defining point struct 
@@ -83,11 +83,11 @@ public:
 		this->points = RotateBy(this->points, -radians);//3
 		this->points = ScaleDimTo(this->points, SquareSize, OneDThreshold);//4
 		if (useBoundedRotationInvariance) {
-			points = RotateBy(this->points, +radians);
+			points = RotateBy(this->points, radians);
 		}
 		this->points = TranslateTo(this->points, Origin);//5
 		this->StartUnitVector = CalcStartUnitVector(this->points, StartAngleIndex); //should check it again
-		wxLogMessage("%f ,%f",StartUnitVector.x,StartUnitVector.y);
+		//wxLogMessage("%f ,%f",StartUnitVector.x,StartUnitVector.y);
 		this->vectorizedPoints = Vectorize(this->points); // for Protractor	
 	}
 	std::vector<Point>Resample(std::vector<Point>& points, int n)
@@ -409,29 +409,30 @@ public:
 			{Point(417,499), Point(325,557)},
 			{Point(371,486), Point(371,571)}
 		};
-		vector<vector<Point>> halfPoints = {
-			{Point(325,499), Point(417,557)},
-			{Point(417,499), Point(325,557)},
-			{Point(371,486), Point(371,571)}
+		vector<vector<Point>> half_notepoints = {
+	{Point(546, 465), Point(546, 531)},
+	{Point(540, 530), Point(536, 529), Point(533, 528), Point(529, 529), Point(524, 530), Point(520, 532), Point(515, 535), Point(511, 539), Point(508, 545), Point(506, 548), Point(506, 554), Point(509, 558), Point(512, 561), Point(517, 564), Point(521, 564), Point(527, 563), Point(531, 560), Point(535, 557), Point(538, 553), Point(542, 548), Point(544, 544), Point(546, 540), Point(546, 536)}
 		};
-		vector<string> gestures = { "T", "N", "D", "P", "X", "H", "I",
+
+		vector<string> gestures = { "T", "N", "D", "P", "X", "H", "I", "exclamation"
 							  "line", "five-point star", "null", "arrowhead", "pitchfork","six-point star","asterisk", "half-note" };
 
-		Multistrokes.push_back(Multistroke(gestures[0], useBoundedRotationInvariance, { Tpoints }));
-		 Multistrokes.push_back(Multistroke(gestures[1], useBoundedRotationInvariance, { Npoints }));
-		 Multistrokes.push_back(Multistroke(gestures[2], useBoundedRotationInvariance, { Dpoints }));
-		 Multistrokes.push_back(Multistroke(gestures[3], useBoundedRotationInvariance, { Ppoints }));
-		 Multistrokes.push_back(Multistroke(gestures[4], useBoundedRotationInvariance, { Xpoints }));
-		 Multistrokes.push_back(Multistroke(gestures[5], useBoundedRotationInvariance, { Hpoints }));
-		 Multistrokes.push_back(Multistroke(gestures[6], useBoundedRotationInvariance, { Ipoints }));
-		Multistrokes.push_back(Multistroke(gestures[7], useBoundedRotationInvariance, { exclamationspoints }));
-		 Multistrokes.push_back(Multistroke(gestures[8], useBoundedRotationInvariance, { linePoints }));
-		 Multistrokes.push_back(Multistroke(gestures[9], useBoundedRotationInvariance, { fivePointStarPoints }));
-		Multistrokes.push_back(Multistroke(gestures[10], useBoundedRotationInvariance, { nullPoints }));
-		Multistrokes.push_back(Multistroke(gestures[11], useBoundedRotationInvariance, { arrowheadPoints }));
-		 Multistrokes.push_back(Multistroke(gestures[12], useBoundedRotationInvariance, { pitchforkPoints }));
-		 Multistrokes.push_back(Multistroke(gestures[13], useBoundedRotationInvariance, { sixPointStarPoints }));
-		 Multistrokes.push_back(Multistroke(gestures[14], useBoundedRotationInvariance, { asteriskPoints }));
+		Multistrokes.push_back(Multistroke("T", useBoundedRotationInvariance, { Tpoints }));
+		 Multistrokes.push_back(Multistroke("N", useBoundedRotationInvariance, { Npoints }));
+		 Multistrokes.push_back(Multistroke("D", useBoundedRotationInvariance, { Dpoints }));
+		 Multistrokes.push_back(Multistroke("P", useBoundedRotationInvariance, { Ppoints }));
+		 Multistrokes.push_back(Multistroke("X", useBoundedRotationInvariance, { Xpoints }));
+		 Multistrokes.push_back(Multistroke("H", useBoundedRotationInvariance, { Hpoints }));
+		 Multistrokes.push_back(Multistroke("I", useBoundedRotationInvariance, { Ipoints }));
+		Multistrokes.push_back(Multistroke("exclamation", useBoundedRotationInvariance, { exclamationspoints }));
+		 Multistrokes.push_back(Multistroke("line", useBoundedRotationInvariance, { linePoints }));
+		 Multistrokes.push_back(Multistroke("five-point star", useBoundedRotationInvariance, { fivePointStarPoints }));
+		Multistrokes.push_back(Multistroke("null", useBoundedRotationInvariance, { nullPoints }));
+		Multistrokes.push_back(Multistroke("arrowhead", useBoundedRotationInvariance, { arrowheadPoints }));
+		 Multistrokes.push_back(Multistroke("pitchfork", useBoundedRotationInvariance, { pitchforkPoints }));
+		 Multistrokes.push_back(Multistroke("six-point star", useBoundedRotationInvariance, { sixPointStarPoints }));
+		 Multistrokes.push_back(Multistroke("asterisk", useBoundedRotationInvariance, { asteriskPoints }));
+		 Multistrokes.push_back(Multistroke("half-note", useBoundedRotationInvariance, { half_notepoints }));
 
 	}
 
@@ -657,35 +658,47 @@ private:
 		delete gc;
 	}
 
-	void OnSubmitButtonClick(wxCommandEvent& event) {
+		void OnSubmitButtonClick(wxCommandEvent & event) {
 
-		vector<vector<Point>> strokes;
-		std::vector<Point> currentStroke;
-		for (size_t i = 0; i < m_points.size(); i++) {
-			const wxPoint& p = m_points[i];
+			vector<vector<Point>> strokes;
+			std::vector<Point> currentStroke;
+			for (size_t i = 1; i < m_points.size(); i++) {
+				const wxPoint& p = m_points[i];
 
-			// Check if this is the end of a stroke
-			if (p == wxPoint(-1, -1) || i == m_points.size() - 1) {
-				// Add the last point if it hasn't already been added
-				if (i != m_points.size() - 1) {
+				// Check if this is the end of a stroke
+				//wxLogMessage("POINT P: (%d,%d)", m_points[i].x,m_points[i].y);
+				if (p.x== -1 && p.y== -1 || i == m_points.size() - 1) {
+					//wxLogMessage(" Inside POINT P: (%d,%d)", p.x, p.y);
+					// Add the last point if it hasn't already been added
+					//if (i != m_points.size() - 1) {
+						if(p.x!=-1 &&p.y!=-1)
+						currentStroke.emplace_back(p.x, p.y);
+					//}
+
+					// Add the current stroke to the list of strokes and start a new stroke
+					if(currentStroke.size()>2)
+					strokes.push_back(currentStroke);
+					currentStroke.clear();
+				}
+				else {
 					currentStroke.emplace_back(p.x, p.y);
 				}
-
-				// Add the current stroke to the list of strokes and start a new stroke
-				strokes.push_back(currentStroke);
-				currentStroke.clear();
 			}
-			else {
-				currentStroke.emplace_back(p.x, p.y);
+			wxLogMessage("Strokes:");
+			for (size_t i = 0; i < strokes.size(); i++) {
+				wxLogMessage("Stroke %d:", i);
+				const vector<Point>& points = strokes[i];
+				for (size_t j = 0; j < points.size(); j++) {
+					wxLogMessage("    (%f, %f)", points[j].x, points[j].y);
+				}
 			}
+			MGestureRecognizer GR(false); // Instantiate your recognizer object
+			Result res = GR.Recognize(strokes, false, false, false);
+			wxString outputStr = wxString::Format("Result: %s (%f) in %d ms", res.Name, res.Score, res.Time);
+			m_output->SetLabel(outputStr);
+			m_points.clear();
+			Refresh();
 		}
-		MGestureRecognizer GR(true); // Instantiate your recognizer object
-		Result res = GR.Recognize(strokes, false, false, false);
-		wxString outputStr = wxString::Format("Result: %s (%f) in %d ms", res.Name, res.Score, res.Time);
-		m_output->SetLabel(outputStr);
-		m_points.clear();
-		Refresh();
-	}
 
 	//event handler is called when the left mouse button is pressed and pushes position to m_points
 	void OnLeftDown(wxMouseEvent& event)
