@@ -25,6 +25,7 @@
 #include <memory>
 #include <unordered_map>
 #include <wx/log.h>
+#include <numeric>
 using namespace std;
 
 class Point {//Defining point struct 
@@ -782,7 +783,7 @@ public:
 					//wxLogMessage("gesture\n");
 					//score[user.first][gesture] = map<string, double>();
 					//score[user.first][gesture]["accuracy"] = 0.0;
-					for (int i = 1; i <= 9; i++) { //we can decrease the value to 10
+					for (int i = 1; i <= 2; i++) { //we can decrease the value to 10
 						//wxLogMessage("for loop\n");
 						/*log.RandomIteration = to_string(i);
 						log.NoTrainingExample = 10;
@@ -944,49 +945,85 @@ public:
 		return true;
 
 	}
-	pair< map< string, vector< vector<Point>>>, map< string, vector<vector<Point>>>> getSplitData(map< string, vector< vector<Point>>>& gestures, int E) {
+	pair< map< string, vector< vector<Point>>>, map< string, vector<Point>>> getSplitData(map< string, vector< vector<Point>>>& gestures, int E) {
 		map< string, vector< vector<Point>>> training_set;
-		map< string, vector<vector<Point>>> testing_set;
+		map< string, vector<Point>> testing_set;
 		srand(time(nullptr));
+		//wxLogMessage("The size of gestures map is: %d", gestures.size());
+		/*for (auto& user : gestures) {
+			wxLogMessage("Size of %s vector: %d", user.first, user.second.size());
+		}*/
 		for (auto& gesture : gestures) {
-			// Select a random index for testing set
-			int test_index = rand() % E;
-
-			// Add all other candidates to training set
+			//vector<vector<Point>> gesture_training_set
 			for (int i = 0; i < E; i++) {
-				if (i != test_index) {
-					wxLogMessage("training Name: %s", gesture.first);
-					training_set[gesture.first].push_back(gesture.second[i]);
-				}
-			}
+				//arrow01 =vector of Points
+				//wxLogMessage("gesture[%s][%d]: %f", gesture.first, i, gesture.second[]);
+				training_set[gesture.first].push_back(gesture.second[i]);
 
-			// Add the selected candidate to testing set
-			testing_set[gesture.first].push_back(gesture.second[test_index]);
+			}
+			testing_set[gesture.first] = gesture.second[rand() % (10 - E) + E];
+			//wxLogMessage("YAyy");
+		}
+		return  make_pair(training_set, testing_set);
+	}
+
+
+
+
+
+	pair<map<string, vector<vector<Point>>>, map<string, vector<vector<Point>>>> getSplitData(map<string, vector<vector<Point>>>& gestures, int E) {
+		map<string, vector<vector<Point>>> training_set;
+		map<string, vector<vector<Point>>> testing_set;
+		unsigned seed = chrono::system_clock::now().time_since_epoch().count();
+		default_random_engine randEnd(seed);
+		
+		srand(time(nullptr));
+		bool flag = false;
+		for (auto& gesture : gestures) {
+
+			auto& pointsVec = gesture.second;
+			vector<int> indices(pointsVec.size());
+			iota(indices.begin(), indices.end(),0);
+			shuffle(indices.begin(), indices.end(), randEnd);
+
+			vector<vector<Point>> testData(1);
+			vector<vector<Point>> trainingData(E);
+			// Check that the size of the gesture vector is at least E
+			for (int i = 0; i < 1; i++) {
+				int index = indices[i];
+				testData[i] = pointsVec[index];
+			}
+			
+			for (int i = 0; i < E; i++) {
+				int index = indices[i];
+				trainingData[i] = pointsVec[index];
+			}
+			
 		}
 		return make_pair(training_set, testing_set);
 	}
 
 
 
-	//pair< map< string, vector< vector<point>>>, map< string, vector<vector<point>>>> getsplitdata(map< string, vector< vector<point>>>& gestures, int e) {
-	//	wxlogmessage("gestures size %d\n",gestures.size());
-	//	map< string, vector< vector<point>>> training_set;
-	//	map< string, vector<vector<point>>> testing_set;
+	//pair< map< string, vector< vector<Point>>>, map< string, vector<vector<Point>>>> getSplitData(map< string, vector< vector<Point>>>& gestures, int E) {
+	//	wxLogMessage("gestures size %d\n",gestures.size());
+	//	map< string, vector< vector<Point>>> training_set;
+	//	map< string, vector<vector<Point>>> testing_set;
 	//	srand(time(nullptr));
-	//	//wxlogmessage("the size of gestures map is: %d", gestures.size());
+	//	//wxLogMessage("The size of gestures map is: %d", gestures.size());
 	//	/*for (auto& user : gestures) {
-	//		wxlogmessage("size of %s vector: %d", user.first, user.second.size());
+	//		wxLogMessage("Size of %s vector: %d", user.first, user.second.size());
 	//	}*/
 	//	//2d map splitting into train and test 
-	//	//intialize multi stroke for pp
-	//	// input is vector<vector<point>> 
-	//	//recognize
+	//	//Intialize Multi stroke for pp
+	//	// input is vector<Vector<point>> 
+	//	//Recognize
 	//	for (auto& gesture : gestures) {
 	//		//gesture.first would be arrow01 p01 and so on
-	//		//vector<vector<point>> gesture_training_set
-	//		for (int i = 0; i < e; i++) {
-	//			//arrow01 =vector of points
-	//			//wxlogmessage("gesture[%s][%d]: %f", gesture.first, i, gesture.second[]);
+	//		//vector<vector<Point>> gesture_training_set
+	//		for (int i = 0; i < E; i++) {
+	//			//arrow01 =vector of Points
+	//			//wxLogMessage("gesture[%s][%d]: %f", gesture.first, i, gesture.second[]);
 	//			training_set[gesture.first].push_back(gesture.second[i]);
 	//			// arrow 01 its 2 strokes
 	//			//p01 its 2 strokes
@@ -994,7 +1031,7 @@ public:
 	//		}
 	//		// 1 20 
 	//		testing_set[gesture.first] = gesture.second;
-	//		//wxlogmessage("yayy");
+	//		//wxLogMessage("YAyy");
 	//	}
 	//	return  make_pair(training_set, testing_set);
 	//}
