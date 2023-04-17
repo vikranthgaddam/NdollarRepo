@@ -26,17 +26,31 @@
 #include <unordered_map>
 #include <wx/log.h>
 #include <numeric>
+#include <filesystem>
 using namespace std;
 
 class Point {//Defining point struct 
 public:
 	double x;
 	double y;
+	long long int t;
 	Point(double x, double y) {
 		this->x = x;
 		this->y = y;
 	}
+	Point(double x, double y, int t) {
+		this->x = x;
+		this->y = y;
+		this->t = t;
+	}
 	Point() {}
+};
+
+
+class splitDataStruct {
+public:
+	string name;
+	vector<vector<Point>> gesturePoints; 
 };
 
 struct Rect { //Defining rectangle for bounding box
@@ -435,13 +449,18 @@ public:
 
 	}
 	vector<Multistroke> OfflineStrokes;
-	MGestureRecognizer(map<string, vector<vector<Point>>>& inputTempatePoints) {
+	MGestureRecognizer(vector<splitDataStruct>& inputTempatePoints) {
+		
 		for (auto& it : inputTempatePoints) {
-			this->OfflineStrokes.push_back(Multistroke(it.first,true,it.second));
+			//wxLogMessage("Preprcoess started for %s", it.name);
+			this->OfflineStrokes.push_back(Multistroke(it.name,false,it.gesturePoints));
+			//wxLogMessage("Preprcoess Done for %s",it.name);
 		}
-		wxLogMessage("Preprcoess Multistrokes");
+		//wxLogMessage("Preprcoess DOne");
 	}
-
+	bool comparePair(const std::pair<std::string, double>& a, const std::pair<std::string, double>& b) {
+		return a.second > b.second;
+	}
 
 	vector<Multistroke> Multistrokes;
 	Result Recognize(std::vector<std::vector<Point>> strokes, bool useBoundedRotationInvariance, bool requireSameNoOfStrokes, bool useProtractor) {
@@ -478,45 +497,79 @@ public:
 		auto t1 = std::chrono::high_resolution_clock::now();
 		return (u == -1) ? Result("No match.", 0.0, std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count()) : Result(Multistrokes[u].name, useProtractor ? (1.0 - b) : (1.0 - b / HalfDiagonal), std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count());
 	};
-	Result OfflineRecognize(std::vector<std::vector<Point>> strokes, bool useBoundedRotationInvariance, bool requireSameNoOfStrokes, bool useProtractor) {
-		wxLogMessage("Here\n");
+	OfflineResult OfflineRecognize(vector<vector<Point>> strokes, bool useBoundedRotationInvariance, bool requireSameNoOfStrokes, bool useProtractor) {
+		//wxLogMessage("Here\n");
 		auto t0 = std::chrono::high_resolution_clock::now();
-		wxLogMessage("Here after\n");
+		/*wxLogMessage("Here after\n");*/
+		vector<OfflineResult> final;
 		auto points = CombineStrokes(strokes); // make one connected unistroke from the given strokes
-		string temp = "";
-		wxLogMessage("Reading candidatae");
-		Unistroke candidate(temp, useBoundedRotationInvariance, points);
+		string t = "";
+		//wxLogMessage("Reading candidatae");
+		Unistroke candidate(t, useBoundedRotationInvariance, points);
 
 		int u = -1;
 		int i = 0;
 		int j = 0;
 		double b = INFINITY;
-		for (i = 0; i < Multistrokes.size(); i++) // for each multistroke template
+		OfflineResult temp;
+		vector<pair<string, double>> t1;
+		for (i = 0; i < OfflineStrokes.size(); i++) // for each multistroke template
 		{
-			if (!requireSameNoOfStrokes || strokes.size() == Multistrokes[i].NumStrokes) // optional -- only attempt match when same # of component strokes
+			if (!requireSameNoOfStrokes || strokes.size() == OfflineStrokes[i].NumStrokes) // optional -- only attempt match when same # of component strokes
 			{
-				for (j = 0; j < Multistrokes[i].Unistrokes.size(); j++) // for each unistroke within this multistroke
+				for (j = 0; j < OfflineStrokes[i].Unistrokes.size(); j++) // for each unistroke within this multistroke
 				{
-					if (AngleBetweenUnitVectors(candidate.StartUnitVector, Multistrokes[i].Unistrokes[j].StartUnitVector) <= AngleSimilarityThreshold) // strokes start in the same direction
+					if (AngleBetweenUnitVectors(candidate.StartUnitVector, OfflineStrokes[i].Unistrokes[j].StartUnitVector) <= AngleSimilarityThreshold) // strokes start in the same direction
 					{
-						double d;
+						
+						double d=0.0;
 						if (useProtractor)
-							d = OptimalCosineDistance(Multistrokes[i].Unistrokes[j].vectorizedPoints, candidate.vectorizedPoints);
+							d = OptimalCosineDistance(OfflineStrokes[i].Unistrokes[j].vectorizedPoints, candidate.vectorizedPoints);
 						else
-							d = DistanceAtBestAngle(candidate.points, Multistrokes[i].Unistrokes[j], -AngleRange, AngleRange, AnglePrecision);
-						if (d < b) {
-							b = d;
-							u = i;
+						{
+							d = DistanceAtBestAngle(candidate.points, OfflineStrokes[i].Unistrokes[j], -AngleRange, AngleRange, AnglePrecision);
 						}
+							if (d < b) {
+								b = d;
+								u = i;
+							}
+							temp.gestureName = OfflineStrokes[i].name;
+							temp.score = 1.0 - d / HalfDiagonal;
+							string name = temp.gestureName;
+							t1.push_back(make_pair(name, temp.score));
 					}
 				}
 			}
 		}
-		auto t1 = std::chrono::high_resolution_clock::now();
-		wxLogMessage("before return\n");
-		return (u == -1) ? Result("No match.", 0.0, std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count()) : Result(Multistrokes[u].name, useProtractor ? (1.0 - b) : (1.0 - b / HalfDiagonal), std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count());
+
+		if (u != -1) {
+			temp.gestureName = OfflineStrokes[u].name;
+		}
+		else {
+			temp.gestureName = "No match.";
+		}
+		temp.score = (1.0 - b / HalfDiagonal);
+		std::sort(t1.begin(), t1.end(), std::bind(&MGestureRecognizer::comparePair, this, std::placeholders::_1, std::placeholders::_2));
+		const int max_size = 50;
+		std::vector<std::pair<std::string, double>> t2(max_size);
+
+		// copy the first 50 elements from t1 to t2
+		const int size = std::min(static_cast<int>(t1.size()), max_size);
+		std::copy_n(t1.begin(), size, t2.begin());
+		temp.nbest = t2;
+		t2.clear();
+		t1.clear();
+		//auto t1 = std::chrono::high_resolution_clock::now();
+		//auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0).count();//Time elapsed
+		return temp;
+
+
+		/*auto t1 = std::chrono::high_resolution_clock::now();
+		return (u == -1) ? Result("No match.", 0.0, std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count()) : Result(OfflineStrokes[u].name, useProtractor ? (1.0 - b) : (1.0 - b / HalfDiagonal), std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count());*/
 
 	}
+
+
 	double OptimalCosineDistance(const std::vector<double>& v1, const std::vector<double>& v2)
 	{
 		double a = 0.0;
@@ -649,6 +702,7 @@ public:
 
 	//$1n algo
 	//GestureRecognizer recognizer;
+	
 
 	//Input points from XML Files 
 	OfflineRecognizer() {
@@ -656,17 +710,16 @@ public:
 		wxLog::SetActiveTarget(new wxLogStderr);
 		//XML File 
 		vector<string> labelList = { "arrowhead", "asterisk", "D", "exclamation_point", "five_point_star", "H", "half_note", "I"
-										  "line", "N", "null", "P", "pitchfork","six_point_star","T", "X" };
+										  ,"line", "N", "null", "P", "pitchfork","six_point_star","T", "X" };
 		vector<string> userName = { "10" ,"11","12","22","28","41","58","61","66","68","71","73","75","77","85","88","94","95","98","99"};
 		string fileName = "";
 		string totalFileName = "";
 		string part = "";
 		string storeName = "";
-		vector<vector<Point>> strokes;
 		part = ""; //C:/Users/vikra/Desktop/HCIRA/xml/xml_logs/s0
 		//C:\Users\vikra\Desktop\0703\ndollar\10-stylus-MEDIUM
 		for (const std::string& name : userName) {
-			for (int i = 0; i < 1; i++) {
+			for (int i = 0; i < 16; i++) {
 				string temp = "";
 				if (name=="94"||name == "66" || name == "58" || name == "61" || name == "73" || name == "75" || name == "77" || name == "99" || name == "41" || name == "85") {
 					temp = "-finger-MEDIUM";
@@ -677,7 +730,7 @@ public:
 				part = "C:/Users/91977/Downloads/mmg(1)/" + name + temp + "/" + name + temp+ "-" + labelList[i] + "-";
 				//wxLogMessage("Part :%s", part);
 				for (int j = 1; j <= 10; j++) {
-
+					vector<vector<Point>> strokes;
 					if (j < 10) {
 						fileName = part + "0" + to_string(j) + ".xml";
 						totalFileName = labelList[i] + "0" + to_string(j);
@@ -709,7 +762,7 @@ public:
 						strokes.push_back(temp);
 						stroke = stroke->NextSiblingElement("Stroke");
 					}
-					offlineData[name][temp][totalFileName] = strokes;
+					offlineData[name]["medium"][totalFileName] = strokes;
 				}
 				
 			}
@@ -756,124 +809,135 @@ public:
 	//}
 
 	void recognizeOfflineData() {
+
+		/*for (auto& it : offlineData) {
+			wxLogMessage("Preprcoess started for %s", it.first);
+			for (auto& it2 : it.second) {
+				wxLogMessage("speed %s", it2.first);
+				for (auto& it3 : it2.second) {
+					wxLogMessage("GEsture Name started for %s", it3.first);
+					for (auto& it4 : it3.second) {
+					
+						for (auto& i : it4) {
+							wxLogMessage("%f,%f", i.x, i.y);
+						}
+						}
+				}
+			}
+			this->OfflineStrokes.push_back(Multistroke(it.name,false,it.gesturePoints));
+			wxLogMessage("Preprcoess Done for %s", it.first);
+		}*/
+
 		//n best list sort of 
-		wxLogMessage("Inside the recognizeOffline Data\n");
-		wxLogMessage("Size map: %d", offlineData.size());
+		/*wxLogMessage("Inside the recognizeOffline Data\n");
+		wxLogMessage("Size map: %d", offlineData.size());*/
 		map< string, map<int, map< string, double>>> score;//loading 
 		double total = 0;
 		double correct = 0;
-		/*std::ofstream outfile("output.csv");
-		LogData log;*/
+
+		std::ofstream outfile("output.csv");
+		LogData log;
 
 		// Check if the file was opened successfully
-		/*if (!outfile.is_open()) {
+		if (!outfile.is_open()) {
 			std::cerr << "Failed to open file for writing." << std::endl;
-		}*/
+		}
 
 		//User[all-users]	GestureType[all-gestures-types]	RandomIteration[1to100]	#ofTrainingExamples[E]	TotalSizeOfTrainingSet[count]	TrainingSetContents[specific-gesture-instances]	Candidate[specific-instance]	RecoResultGestureType[what-was-recognized]	CorrectIncorrect[1or0]	RecoResultScore	RecoResultBestMatch[specific-instance]	RecoResultNBestSorted[instance-and-score]
 
-		//outfile << "User[all-users],GestureType[all-gesture-types],RandomIteration[1to10],#ofTrainingExample[E],TotalSizeOfTrainingSet[count],TrainingSetContents[specific-gesture-instances],Candidate[specific-instance],RecoResultGestureType[what-was-recognized],CorrectIncorrect[1or0],RecoResultScore,RecoResultBestMatch[specific-instance],RecoResultNBestSorted[instance-and-score]" << std::endl;
+		outfile << "User[all-users],GestureType[all-gesture-types],RandomIteration[1to10],#ofTrainingExample[E],TotalSizeOfTrainingSet[count],TrainingSetContents[specific-gesture-instances],Candidate[specific-instance],RecoResultGestureType[what-was-recognized],CorrectIncorrect[1or0],RecoResultScore,RecoResultBestMatch[specific-instance],RecoResultNBestSorted[instance-and-score]" << std::endl;
 		for (auto& user : offlineData) {
+			//wxLogMessage("Users data%s", user.first);
 			//if (user.first == "s02")
 			//wxLogMessage("users\n");
 			{
-				//log.User = user.first;
+				log.User = user.first;
 				//score[user.first] = map<int,map< string, double>>();
 				for (int gesture = 1; gesture <= 9; gesture++) { //this is the value of the 
 					//wxLogMessage("gesture\n");
 					//score[user.first][gesture] = map<string, double>();
 					//score[user.first][gesture]["accuracy"] = 0.0;
-					for (int i = 1; i <= 2; i++) { //we can decrease the value to 10
+					for (int i = 1; i <= 9; i++) { //we can decrease the value to 10
 						//wxLogMessage("for loop\n");
-						/*log.RandomIteration = to_string(i);
-						log.NoTrainingExample = 10;
-						*/
-						pair< map< string, vector< vector<Point>>>, map< string, vector<vector<Point>>>> split_data = getSplitData(offlineData[user.first]["-finger-MEDIUM"], 9);
-						map< string, vector<vector<Point>>> train_set = split_data.first;//TEsting conatines everything from offline 160-training
-						map<string, vector<vector<Point>>> test_set = split_data.second;//a specific set of gestures with points training
-						wxLogMessage("Size: %d",test_set.size());
-						wxLogMessage("training Size: %d", train_set.size());
-						/*log.TotalSizeOfTrainingSet = train_set.size();
-						for (auto& elem : train_set) {
-							string temp = user.first + "-" + elem.first + "-" + to_string(i);
-							log.TrainingSetContents.push_back(elem.first);
-						}*/
-						/*for (auto& elem : test_set) {
-							log.candidateSpecificInstance = user.first + "-" + elem.first + "-" + to_string(i);
-							log.GestureType = elem.first;
-						}*/
+						log.RandomIteration = to_string(i);
+						log.NoTrainingExample = gesture;
+						
 
+						
+						pair<splitDataStruct,vector<splitDataStruct> > split_data = getsplitdata(offlineData[user.first]["medium"], gesture);
+						 vector<splitDataStruct> train_set = split_data.second;//TEsting conatines everything from offline 160-training
+						splitDataStruct test_set = split_data.first;//a specific set of gestures with points training
+					/*	wxLogMessage("Candidate name: %s",test_set.name	);
+						wxLogMessage("training Size: %d", train_set.size());*/
+						log.TotalSizeOfTrainingSet = train_set.size();
+						log.TrainingSetContents.clear();
+						for (auto& elem : train_set) {
+							//user name // arrow 04 //iteration number
+							string temp = user.first + "-" + elem.name + "-" + to_string(i);
+							log.TrainingSetContents.push_back(temp);
+						}
+
+						
+							//log.candidateSpecificInstance = user.first + "-" + test_set.name + "-" + to_string(i);
+						//wxLogMessage("train set size: %d", train_set.size());
+					
 
 						MGestureRecognizer recognizer(train_set);//loading templates
-						//wxLogMessage("after the recognizer\n");
-						//offline strokes templates loaded
-						// Iterate over the map and its content
-						for ( auto& elem : test_set) {
-							wxLogMessage("Testing set recognition starts");
-							// Print the map key (a string)
-							//wxLogMessage("Map key: %s", elem.first);
-							/*if (score[user.first][gesture].find(elem.first)!= score[user.first][gesture].end()) {
-								wxLogMessage("First value %f", score[user.first][gesture][elem.first]);
-								score[user.first][gesture][elem.first] = 0;
-							}*/
+						std::string r1 = ""; //gesturType
 
-							//Traingin set 3 value //candidate value //Recognized geture value //Correct or incorect recoscore //specific instance is from recognizer Nbest lits from recognizer
-
+						for (char c : test_set.name) {
+							if (!isdigit(c)) {
+								r1 += c;
+							}
+						}
 
 							
-								Result res = recognizer.OfflineRecognize(elem.second, false, false, false);
+					OfflineResult res = recognizer.OfflineRecognize(test_set.gesturePoints, true, false, false);
 
 							
-							wxLogMessage("Result: %s -  score: %f", res.Name, res.Score);
-							//string gestureRecognized = res.gestureName;
-							//vector<pair<string, double>> Nbest = res.nbest;
+							//wxLogMessage("Result: %s -  score: %f", res.Name, res.Score);
+						string gestureRecognized = res.gestureName;
+						vector<pair<string, double>> Nbest = res.nbest;
 
-							//log.RecoResultGestureType = gestureRecognized;
-							//log.correct = gestureRecognized == elem.first;
-							//log.RecoResultScore = to_string(res.score);
-							//log.RecoResultBestMatch = user.first + "-" + res.gestureName + "-" + to_string(i);
-							//log.RecoResultNBest = res.nbest;
+						std::string r2 = ""; //Recoresult gesture type
 
+						for (char c : gestureRecognized) {
+							if (!isdigit(c)) {
+								r2 += c;
+							}
+						}
+						log.GestureType = r1;
+						log.RecoResultGestureType = r2;
+						if (log.GestureType == log.RecoResultGestureType) {
+							log.correct = true;
+						}
+						else {
+							log.correct = false;
+						}
+						//log.correct = gestureRecognized.substr(0, elem.first.length() - 1) == elem.first.substr(0, elem.first.length() - 1);
+						log.RecoResultScore = to_string(res.score);
+						log.RecoResultBestMatch = user.first + "-" + res.gestureName;
+						log.RecoResultNBest = res.nbest;
+						log.candidateSpecificInstance = user.first + "-" + test_set.name;
 
-							//if (gestureRecognized == elem.first) {
+						if (log.GestureType == log.RecoResultGestureType) {
 
-							//	score[user.first][gesture][elem.first] += 1;
-							//	log.candidateSpecificInstance = user.first + "-" + elem.first + "-" + to_string(i);
-							//	log.GestureType = elem.first;
-							//	//wxLogMessage("Matched score %f", score[user.first][gesture][elem.first]);
-							//	correct += 1.0;
-							//	//wxLogMessage("HERE inside the loop recognized %s\n", elem.first);
-							//}
+							score[user.first][gesture][test_set.name] += 1;
 
-							//total += 1.0;
-							// Iterate over the vector of Points and print each Point
-							/*for (const auto& point : elem.second) {
-								wxLogMessage("  Point: (%f, %f)", point.x, point.y);
-							//}*/
-							//string User;
-							//string GestureType;
-							//string RandomIteration;
-							//int NoTrainingExample;
-							//int TotalSizeOfTrainingSet;
-							//vector<string>TrainingSetContents;
-							//string candidateSpecificInstance;
-							//string RecoResultGestureType;//what was recognized
-							//bool correct;
-							//string RecoResultScore;
-							//string RecoResultBestMatch;
-							//unordered_map<string, double> RecoResultNBest;
-							/*string contents;
-							for (auto& str : log.TrainingSetContents) {
-								contents += str + ";";
-							}*/
-							/*string NbestString;
-							for (auto& pair : log.RecoResultNBest) {
-								NbestString += pair.first + ";" + to_string(pair.second) + ";";
-							}*/
-							/*std::string nbestStr = vectorToString(log.RecoResultNBest);
-							outfile << log.User << "," << log.GestureType << "," << log.RandomIteration << "," << log.NoTrainingExample << "," << log.TotalSizeOfTrainingSet << "," << contents << "," << log.candidateSpecificInstance << "," << log.RecoResultGestureType << "," << to_string(log.correct) << "," << log.RecoResultScore << "," << log.RecoResultBestMatch << "," << nbestStr << endl;*/
+							//log.GestureType = elem.first;
+							correct += 1.0;
 
 						}
+
+						total += 1.0;
+
+
+						std::string contentsString = vector1ToString(log.TrainingSetContents);
+
+						std::string nbestStr = vectorToString(log.RecoResultNBest);
+						outfile << log.User << "," << log.GestureType << "," << log.RandomIteration << "," << log.NoTrainingExample << "," << log.TotalSizeOfTrainingSet << "," << contentsString << "," << log.candidateSpecificInstance << "," << log.RecoResultGestureType << "," << to_string(log.correct) << "," << log.RecoResultScore << "," << log.RecoResultBestMatch << "," << nbestStr << endl;
+
+						
 
 					}
 
@@ -885,8 +949,8 @@ public:
 	/*	wxLogMessage("total %f", total);
 		wxLogMessage("correct %f", correct);*/
 
-		//outfile << "The Total Accuracy" << endl;
-		//outfile << to_string((correct / total) * 100.0) << endl;
+		outfile << "The Total Accuracy" << endl;
+		outfile << to_string((correct / total) * 100.0) << endl;
 		/*for (const auto& user : score) {
 			wxLogMessage("User: %s", user.first);
 			for (const auto& gesture : user.second) {
@@ -896,13 +960,20 @@ public:
 				}
 			}
 		}*/
-		//outfile.close();
+		wxLogMessage("closing");
+		outfile.close();
 		//bool result=writeToFile(score);
 		//wxLogMessage("Print successfully done %s",to_string(result));
 		// calculate and output average accuracy
 
 	}
-
+	std::string vector1ToString(const std::vector<std::string>& v) {
+		std::stringstream ss;
+		for (const auto& s : v) {
+			ss << s << ";";
+		}
+		return ss.str();
+	}
 
 	std::string vectorToString(const std::vector<std::pair<std::string, double>>& v) {
 		std::stringstream ss;
@@ -912,131 +983,166 @@ public:
 		return ss.str();
 	}
 
-	bool writeToFile(map< string, map<int, map< string, double>>> score) {
-		//Traingin set 3 value //candidate value //Recognized geture value //Correct or incorect recoscore //specific instance is from recognizer Nbest lits from recognizer
-
-
-		std::ofstream outfile("output.csv");
-
-		// Check if the file was opened successfully
-		if (!outfile.is_open()) {
-			std::cerr << "Failed to open file for writing." << std::endl;
-			return false;
-		}
-
-		// Write the data to the file as comma-separated values
-		// Header row
-		//User[all-users]	GestureType[all-gestures-types]	RandomIteration[1to100]	#ofTrainingExamples[E]	TotalSizeOfTrainingSet[count]	TrainingSetContents[specific-gesture-instances]	Candidate[specific-instance]	RecoResultGestureType[what-was-recognized]	CorrectIncorrect[1or0]	RecoResultScore	RecoResultBestMatch[specific-instance]	RecoResultNBestSorted[instance-and-score]
-
-		outfile << "User,GestureID,GestureName,Score" << std::endl;
-		for (const auto& user : score) {
-			for (const auto& gesture_id : user.second) {
-				for (const auto& gesture_name_score : gesture_id.second) {
-					outfile << user.first << ","
-						<< gesture_id.first << ","
-						<< gesture_name_score.first << ","
-						<< gesture_name_score.second << std::endl;
-				}
-			}
-		}
-
-		// Close the file
-		outfile.close();
-		return true;
-
-	}
-	pair< map< string, vector< vector<Point>>>, map< string, vector<Point>>> getSplitData(map< string, vector< vector<Point>>>& gestures, int E) {
-		map< string, vector< vector<Point>>> training_set;
-		map< string, vector<Point>> testing_set;
-		srand(time(nullptr));
-		//wxLogMessage("The size of gestures map is: %d", gestures.size());
-		/*for (auto& user : gestures) {
-			wxLogMessage("Size of %s vector: %d", user.first, user.second.size());
-		}*/
-		for (auto& gesture : gestures) {
-			//vector<vector<Point>> gesture_training_set
-			for (int i = 0; i < E; i++) {
-				//arrow01 =vector of Points
-				//wxLogMessage("gesture[%s][%d]: %f", gesture.first, i, gesture.second[]);
-				training_set[gesture.first].push_back(gesture.second[i]);
-
-			}
-			testing_set[gesture.first] = gesture.second[rand() % (10 - E) + E];
-			//wxLogMessage("YAyy");
-		}
-		return  make_pair(training_set, testing_set);
-	}
-
-
-
-
-
-	pair<map<string, vector<vector<Point>>>, map<string, vector<vector<Point>>>> getSplitData(map<string, vector<vector<Point>>>& gestures, int E) {
-		map<string, vector<vector<Point>>> training_set;
-		map<string, vector<vector<Point>>> testing_set;
+	pair<splitDataStruct,vector<splitDataStruct>> getsplitdata(map<string, vector<vector<Point>>>& gestures, int e) {
+		//wxlogmessage("%d", gestures.size());
+	    
 		unsigned seed = chrono::system_clock::now().time_since_epoch().count();
-		default_random_engine randEnd(seed);
-		
+		default_random_engine randend(seed);
+		vector<splitDataStruct> totaldata;
 		srand(time(nullptr));
 		bool flag = false;
-		for (auto& gesture : gestures) {
-
-			auto& pointsVec = gesture.second;
-			vector<int> indices(pointsVec.size());
-			iota(indices.begin(), indices.end(),0);
-			shuffle(indices.begin(), indices.end(), randEnd);
-
-			vector<vector<Point>> testData(1);
-			vector<vector<Point>> trainingData(E);
-			// Check that the size of the gesture vector is at least E
-			for (int i = 0; i < 1; i++) {
-				int index = indices[i];
-				testData[i] = pointsVec[index];
-			}
-			
-			for (int i = 0; i < E; i++) {
-				int index = indices[i];
-				trainingData[i] = pointsVec[index];
-			}
-			
+	
+		for (auto& it : gestures) {
+			splitDataStruct temp;
+			temp.name = it.first;
+			temp.gesturePoints = it.second;
+			totaldata.push_back(temp);
+			temp = splitDataStruct();
 		}
-		return make_pair(training_set, testing_set);
+		/*for (auto& it : totaldata) {
+			wxlogmessage("gestures name %s ", it.name);
+			for (auto& it1 : it.gesturepoints) {
+				for (auto& it2 : it1) {
+					wxlogmessage("%f%f",it2.x,it2.y);
+				}
+			}
+		}*/
+		//i + 16 | i = 0; i < 15;
+		auto& pointsvec = totaldata;
+		//wxLogMessage("size: %d", totaldata.size());
+		vector<int> indices(pointsvec.size());
+		iota(indices.begin(), indices.end(), 0);
+		shuffle(indices.begin(), indices.end(), randend);
+		vector<int> trainingIndices(10);
+		iota(trainingIndices.begin(), trainingIndices.end(), 0);
+		shuffle(trainingIndices.begin(), trainingIndices.end(), randend);
+		/*wxlogmessage("map size %d", pointsvec.size());
+		for (auto& it : indices) {
+			wxlogmessage("indices in the vector %d", it);
+		}*/
+
+			splitDataStruct testdata;
+			vector<splitDataStruct> trainingdata;
+			// check that the size of the gesture vector is at least 
+			int index = indices[0];
+			testdata.name = pointsvec[index].name;
+			testdata.gesturePoints = pointsvec[index].gesturePoints;
+			for (int j = 1; j <= totaldata.size(); j+=10) {
+				splitDataStruct temp;
+				for (int i = 1; i <= e; i++) {
+					int index = trainingIndices[i];
+					if (j + index != 160) {
+						temp.name = totaldata[j + index].name;
+						temp.gesturePoints = totaldata[j + index].gesturePoints;
+						shuffle(trainingIndices.begin(), trainingIndices.end(), randend);
+						trainingdata.push_back(temp);
+					}
+					else {
+						temp.name = totaldata[159].name;
+						temp.gesturePoints = totaldata[159].gesturePoints;
+						shuffle(trainingIndices.begin(), trainingIndices.end(), randend);
+						trainingdata.push_back(temp);
+					}
+				}
+				temp = splitDataStruct();
+			}
+			
+			//for (auto& it : totaldata) {
+			//	wxLogMessage("gestures name %s ", it.name);
+			//	/*for (auto& it1 : it.gesturepoints) {
+			//		for (auto& it2 : it1) {
+			//			wxlogmessage("%f%f", it2.x, it2.y);
+			//		}
+			//	}*/
+			//}
+
+			
+		
+		return make_pair(testdata, trainingdata);
 	}
 
-
-
-	//pair< map< string, vector< vector<Point>>>, map< string, vector<vector<Point>>>> getSplitData(map< string, vector< vector<Point>>>& gestures, int E) {
-	//	wxLogMessage("gestures size %d\n",gestures.size());
-	//	map< string, vector< vector<Point>>> training_set;
-	//	map< string, vector<vector<Point>>> testing_set;
-	//	srand(time(nullptr));
-	//	//wxLogMessage("The size of gestures map is: %d", gestures.size());
-	//	/*for (auto& user : gestures) {
-	//		wxLogMessage("Size of %s vector: %d", user.first, user.second.size());
-	//	}*/
-	//	//2d map splitting into train and test 
-	//	//Intialize Multi stroke for pp
-	//	// input is vector<Vector<point>> 
-	//	//Recognize
-	//	for (auto& gesture : gestures) {
-	//		//gesture.first would be arrow01 p01 and so on
-	//		//vector<vector<Point>> gesture_training_set
-	//		for (int i = 0; i < E; i++) {
-	//			//arrow01 =vector of Points
-	//			//wxLogMessage("gesture[%s][%d]: %f", gesture.first, i, gesture.second[]);
-	//			training_set[gesture.first].push_back(gesture.second[i]);
-	//			// arrow 01 its 2 strokes
-	//			//p01 its 2 strokes
-
-	//		}
-	//		// 1 20 
-	//		testing_set[gesture.first] = gesture.second;
-	//		//wxLogMessage("YAyy");
-	//	}
-	//	return  make_pair(training_set, testing_set);
-	//}
+};
+struct CollectDataStruct {
+	string filename;
+	string subject;
+	string date;
+	string TimeOfDay;
+	string speed;
 
 };
+
+class CollectData {
+public:
+	void savePointsToXml(const vector<vector<Point>>& points, const std::string& filename, string& gesture)
+	{
+		// Create the XML document
+
+		tinyxml2::XMLDocument doc;
+		tinyxml2::XMLDeclaration* decl = doc.NewDeclaration();
+		doc.InsertFirstChild(decl);
+
+		// Create the root element
+		tinyxml2::XMLElement* root = doc.NewElement("Gesture");
+		root->SetAttribute("Name", gesture.c_str());
+		root->SetAttribute("Subject", "2");
+		root->SetAttribute("InputType", "Touch");
+		/*root->SetAttribute("Speed", "medium");
+		root->SetAttribute("Number", "1");*/
+		root->SetAttribute("NumPts", points.size()*points[0].size());
+		
+	/*	root->SetAttribute("Millseconds", "1268");
+		root->SetAttribute("AppName", "Gestures");
+		root->SetAttribute("AppVer", "3.5.0.0");
+		root->SetAttribute("Date", "Monday, March 05, 2007");*/
+		root->SetAttribute("data-type", "simple");
+		doc.InsertEndChild(root);
+		// Add each point as a child element
+		//wxLogMessage("storing\n");
+		int strokeIndex = 1;
+		while (strokeIndex <= points.size()) {
+			tinyxml2::XMLElement* strokeElement = doc.NewElement("Stroke");
+			strokeElement->SetAttribute("index", strokeIndex);
+			root->InsertEndChild(strokeElement);
+			for (const auto& strokes : points)
+			{	
+				for (const auto& p : strokes) {
+					tinyxml2::XMLElement* pointElement = doc.NewElement("Point");
+					pointElement->SetAttribute("X", p.x);
+					pointElement->SetAttribute("Y", p.y);
+					pointElement->SetAttribute("T", p.t);
+					pointElement->SetAttribute("Pressure", "128");
+					strokeElement->InsertEndChild(pointElement);
+				}
+			}
+			
+			strokeIndex++;
+		}
+		// Create the folder if it doesn't exist
+		std::filesystem::path folderPath("user_inputs");
+		if (!std::filesystem::is_directory(folderPath))
+		{
+			if (!std::filesystem::create_directory(folderPath))
+			{
+				std::cerr << "Failed to create directory: " << folderPath << std::endl;
+				return;
+			}
+		}
+		//wxLogMessage("writing\n");
+		// Save the document to file in the folder
+		std::filesystem::path filePath = folderPath / filename;
+		if (doc.SaveFile(filePath.string().c_str()) != tinyxml2::XML_SUCCESS)
+		{
+			std::cerr << "Failed to save XML file: " << filePath << std::endl;
+		}
+		// Save the document to file
+	}
+
+};
+
+
+
+
+
 
 
 class MyCanvas : public wxWindow
@@ -1046,9 +1152,11 @@ public:
 	MyCanvas(wxWindow* parent) : wxWindow(parent, wxID_ANY)
 	{
 
-		m_prompt = new wxStaticText(this, wxID_ANY, "Draw a {Gesture}");
-		//m_output = new wxStaticText(this, wxID_ANY, "");
-		total_counter = new wxStaticText(this, wxID_ANY, "Total Counter: 0/160");
+		m_prompt = new wxStaticText(this, wxID_ANY, "click submit to begin");
+		//m_prompt = new wxStaticText(this, wxID_ANY, "Draw a {Gesture}");
+		m_output = new wxStaticText(this, wxID_ANY, "");
+		m_counter = new wxStaticText(this, wxID_ANY, "0 / 160");
+		//total_counter = new wxStaticText(this, wxID_ANY, "Total Counter: 0/160");
 
 		m_clearButton = new wxButton(this, wxID_ANY, "Clear");
 		m_submitButton = new wxButton(this, wxID_ANY, "Submit");
@@ -1057,8 +1165,10 @@ public:
 		m_font = font;
 		//m_output->SetFont(m_font);
 
-		total_counter->SetFont(m_font);
+		//total_counter->SetFont(m_font);
 		m_prompt->SetFont(m_font);
+		m_output->SetFont(m_font);
+		m_counter->SetFont(m_font);
 
 		m_submitButton->SetBackgroundColour(wxColour(0, 255, 0));
 		m_clearButton->SetBackgroundColour(wxColour(255, 0, 0));
@@ -1070,7 +1180,8 @@ public:
 		//Text Sizer
 		wxBoxSizer* textSizer = new wxBoxSizer(wxHORIZONTAL);
 		textSizer->Add(m_prompt, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, 0);
-		textSizer->Add(total_counter, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 0); // add counter to sizer
+		textSizer->Add(m_output, 0, wxALIGN_CENTER_VERTICAL | wxTOP, 0);
+		//textSizer->Add(total_counter, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 0); // add counter to sizer
 
 		//Button Sizer
 		wxBoxSizer* buttonsSizer = new wxBoxSizer(wxHORIZONTAL);
@@ -1100,21 +1211,36 @@ public:
 private:
 	//event handler is called when the canvas is repainted
 	wxStaticText* m_prompt;
+	wxStaticText* m_output;
+	wxStaticText* m_counter;
 	wxStaticText* total_counter;
 	wxButton* m_clearButton;
 	bool m_isDrawing = false;
 	wxButton* m_submitButton;
 	vector<wxPoint> m_points;
-	vector<vector<wxPoint>> listOf;
+	vector<Point> tpoints;
 	vector<vector<Point>> strokes;
 	wxFont m_font;
 	vector<Point> points;
+	unordered_map<string, int> mp;
+	int counter = -1;
+	int current_gesture = 0;
+	
+	vector<string> labelList = { "arrowhead", "asterisk", "D", "exclamation_point", "five_point_star", "H", "half_note", "I","line", "N", "null", "P", "pitchfork","six_point_star","T", "X" };
+	//vector<string> labelList = { "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P" };
+
+	
+	CollectData dataCollection;
+	
 	void OnPaint(wxPaintEvent& event)
 	{
 		wxPaintDC dc(this);
 		wxGraphicsContext* gc = wxGraphicsContext::Create(dc);
 
-		gc->SetPen(wxPen(*wxRED, 5));
+		static vector<wxColour> colors = { wxColour(255, 0, 0), wxColour(0, 255, 0), wxColour(0, 0, 255) };
+		static int colorIndex = 0;
+
+		gc->SetPen(wxPen(colors[colorIndex], 5));
 
 		size_t i = 1;
 		while (i < m_points.size()) {
@@ -1125,49 +1251,124 @@ private:
 			i++;
 		}
 
-		delete gc;
+		if (!m_isDrawing) {
+			colorIndex = (colorIndex + 1) % colors.size();
+			delete gc;
+		}
 	}
 
 		void OnSubmitButtonClick(wxCommandEvent & event) {
+			if (counter == -1) {
+				//current_gesture++;
+				counter = 0;
+				wxString next_gesture = wxString::Format("Draw a %s", labelList[current_gesture]);
+				m_prompt->SetLabel(next_gesture);
+				return;
+			}
+			if (counter < 160 && mp[labelList[current_gesture]] != 10) {
+				vector<vector<Point>> strokes;
+				std::vector<Point> currentStroke;
+				
+				for (size_t i = 1; i < tpoints.size(); i++) {
+					Point t = tpoints[i];
+					//const wxPoint& p = m_points[i];
 
-			vector<vector<Point>> strokes;
-			std::vector<Point> currentStroke;
-			for (size_t i = 1; i < m_points.size(); i++) {
-				const wxPoint& p = m_points[i];
+					// Check if this is the end of a stroke
+					//wxLogMessage("POINT P: (%f,%f)", tpoints[i].x, tpoints[i].y);
+					if (t.x == -1.0 && t.y == -1.0 || i == tpoints.size() - 1) {
+						//wxLogMessage(" Inside POINT P: (%f,%f)", t.x, t.y);
+						// Add the last point if it hasn't already been added
+						//if (i != m_points.size() - 1) {
+					
+						if (t.x != -1 && t.y != -1){
+							currentStroke.emplace_back(t.x, t.y,t.t);
+						}
 
-				// Check if this is the end of a stroke
-				//wxLogMessage("POINT P: (%d,%d)", m_points[i].x,m_points[i].y);
-				if (p.x== -1 && p.y== -1 || i == m_points.size() - 1) {
-					//wxLogMessage(" Inside POINT P: (%d,%d)", p.x, p.y);
-					// Add the last point if it hasn't already been added
-					//if (i != m_points.size() - 1) {
-						if(p.x!=-1 &&p.y!=-1)
-						currentStroke.emplace_back(p.x, p.y);
-					//}
-
-					// Add the current stroke to the list of strokes and start a new stroke
-					if(currentStroke.size()>2)
-					strokes.push_back(currentStroke);
-					currentStroke.clear();
+						// Add the current stroke to the list of strokes and start a new stroke
+						if (currentStroke.size() > 2)
+							strokes.push_back(currentStroke);
+						currentStroke.clear();
+					}
+					else {
+						currentStroke.emplace_back(t.x, t.y, t.t);
+					}
 				}
-				else {
-					currentStroke.emplace_back(p.x, p.y);
+				
+				mp[labelList[current_gesture]]++;
+				string name = labelList[current_gesture] + to_string(mp[labelList[current_gesture]]) + ".xml";
+				dataCollection.savePointsToXml(strokes, name,labelList[current_gesture]);
+				counter++;
+				/*current_gesture++ % labelList.size()-1;*/
+				wxString next_gesture = wxString::Format("Draw a %s", labelList[current_gesture]);
+				m_prompt->SetLabel(next_gesture);
+
+				//[VIKRANTH]: gesture is drawn so you can now save it in the file with the name string name = labelList[current_gesture] + to_string(mp[labelList[current_gesture]])
+				//and the vector is already ready so you just need to push it. 
+				//data structure map<string(gesture name), map<string(useName), vector<Point>(storing the points)>>>
+			}
+			else if (counter < 160 && mp[labelList[current_gesture]] == 10) {
+				//current_gesture++;
+				/*for (auto label : labelList) {
+					wxLogMessage("Before %s\n", label);
+				}*/
+				/*auto it = labelList.begin() + current_gesture;
+				labelList.erase(it);*/
+				current_gesture++;
+				wxString next_gesture = wxString::Format("Draw a %s", labelList[current_gesture]);
+				m_prompt->SetLabel(next_gesture);
+				/*for (auto label : labelList) {
+					wxLogMessage("after %s\n", label);
+				}*/
+				/*wxString next_gesture = wxString::Format("Draw a %s", labelList[current_gesture]);
+				m_prompt->SetLabel(next_gesture);*/
+				//continue;
+			}
+			else {
+				//TO DO VIKRANTH : save these points into an xml file, I think I have also laid out the flow. 
+				m_prompt->SetLabel("All gestures complete");
+				for (auto label : mp) {
+					wxLogMessage("Gesture %s: %d", label.first, label.second);
 				}
 			}
-			/*wxLogMessage("Strokes:");
-			for (size_t i = 0; i < strokes.size(); i++) {
-				wxLogMessage("Stroke %d:", i);
-				const vector<Point>& points = strokes[i];
-				for (size_t j = 0; j < points.size(); j++) {
-					wxLogMessage("    (%f, %f)", points[j].x, points[j].y);
-				}
-			}*/
-			MGestureRecognizer GR(false); // Instantiate your recognizer object
-			Result res = GR.Recognize(strokes, false, false, false);
-			wxString outputStr = wxString::Format("Result: %s (%f) in %d ms", res.Name, res.Score, res.Time);
-			m_prompt->SetLabel(outputStr);
+
+
+
+			//vector<vector<Point>> strokes;
+			//std::vector<Point> currentStroke;
+			//for (size_t i = 1; i < m_points.size(); i++) {
+			//	const wxPoint& p = m_points[i];
+
+			//	// Check if this is the end of a stroke
+			//	//wxLogMessage("POINT P: (%d,%d)", m_points[i].x,m_points[i].y);
+			//	if (p.x== -1 && p.y== -1 || i == m_points.size() - 1) {
+			//		//wxLogMessage(" Inside POINT P: (%d,%d)", p.x, p.y);
+			//		// Add the last point if it hasn't already been added
+			//		//if (i != m_points.size() - 1) {
+			//			if(p.x!=-1 &&p.y!=-1)
+			//			currentStroke.emplace_back(p.x, p.y);
+			//		//}
+
+			//		// Add the current stroke to the list of strokes and start a new stroke
+			//		if(currentStroke.size()>2)
+			//		strokes.push_back(currentStroke);
+			//		currentStroke.clear();
+			//	}
+			//	else {
+			//		currentStroke.emplace_back(p.x, p.y);
+			//	}
+			//}
+
+			//MGestureRecognizer GR(false); // Instantiate your recognizer object
+			//Result res = GR.Recognize(strokes, false, false, false);
+			//wxString outputStr = wxString::Format("Result: %s (%f) in %d ms", res.Name, res.Score, res.Time);
+		/*	m_prompt->SetLabel(outputStr);*/
+			tpoints.clear();
 			m_points.clear();
 			Refresh();
+			wxString counterStr = wxString::Format("Counter: %d", counter);
+			m_counter->SetLabel(counterStr + "/160");
+
+
 		}
 		void OnClearButtonClick(wxCommandEvent& event)
 		{
@@ -1180,25 +1381,61 @@ private:
 		if (!m_isDrawing) {
 			m_isDrawing = true;
 			m_points.push_back(wxPoint(-1, -1));
+			tpoints.push_back(Point(-1, -1));
 		}
+		//wxDateTime now = wxDateTime::Now();
+		auto now = std::chrono::system_clock::now();
+		auto duration = now.time_since_epoch();
+		auto seconds = std::chrono::duration_cast<std::chrono::milliseconds>(duration);
+		auto time_since_epoch = static_cast<std::time_t>(seconds.count());
+		//long long milliseconds = now.GetTicks();
+		//int seconds = (int)(milliseconds / 1000);
+		wxPoint p = event.GetPosition();
+		tpoints.push_back(Point(p.x, p.y, abs(time_since_epoch)));
+		tpoints.push_back(Point(-1, -1));
 		m_points.push_back(event.GetPosition());
 		CaptureMouse();
 	}
 
 	//event handler is called when the left mouse button is released
+
 	void OnLeftUp(wxMouseEvent& event)
 	{
+		auto now = std::chrono::system_clock::now();
+		auto duration = now.time_since_epoch();
+		auto seconds = std::chrono::duration_cast<std::chrono::milliseconds>(duration);
+		auto time_since_epoch = static_cast<std::time_t>(seconds.count());
+		wxPoint p = event.GetPosition();
+		tpoints.push_back(Point(p.x, p.y, abs(time_since_epoch)));
+		tpoints.push_back(Point(-1, -1));
 		m_points.push_back(event.GetPosition());
 		ReleaseMouse();
 		m_points.push_back(wxPoint(-1, -1));
 		m_isDrawing = false;
 	}
+	//void OnLeftUp(wxMouseEvent& event)
+	//{
+	//	if (m_isDrawing)
+	//	{
+	//		
+	//		m_points.push_back(event.GetPosition());
+	//		m_points.push_back(wxPoint(-1, -1));
+	//		m_isDrawing = false;
+	//		ReleaseMouse();
+	//	}
+	//}
 
 	//function event handler is called when the mouse is moved
 	void OnMotion(wxMouseEvent& event)
 	{
 		if (event.Dragging() && event.LeftIsDown() && m_isDrawing)
 		{
+			auto now = std::chrono::system_clock::now();
+			auto duration = now.time_since_epoch();
+			auto seconds = std::chrono::duration_cast<std::chrono::milliseconds>(duration);
+			auto time_since_epoch = static_cast<std::time_t>(seconds.count());
+			wxPoint p = event.GetPosition();
+			tpoints.push_back(Point(p.x, p.y, abs(time_since_epoch)));
 			//m_output->SetLabel("Recording unistroke...");
 			m_points.push_back(event.GetPosition());
 			Refresh();
@@ -1215,8 +1452,7 @@ public:
 	{
 		wxFrame* frame = new wxFrame(NULL, wxID_ANY, "$1 Recognizer");
 		MyCanvas* canvas = new MyCanvas(frame);
-		OfflineRecognizer a;
-		//frame->Show();
+		frame->Show();
 
 
 		return true;
